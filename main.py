@@ -16,6 +16,7 @@ from extension import proxies
 import sys
 import time
 import urllib.parse
+from urllib.parse import urlparse, parse_qs
 # Proxy authentication information - Uncomment and modify if proxies are needed
 # proxy = {
 #     'http': 'http://username:password@proxy-address:port',
@@ -24,8 +25,10 @@ import urllib.parse
 username = 'sp43xuny7n'
 password = 'i1NRxNR_66x+xO6A4'
 endpoint = 'gate.dc.smartproxy.com'
-mainport = 20001
+mainport = 26001
 
+globalid = 0
+globalcityname=''
 def setanotherport(port):
     port = port+1
     if port>37959:
@@ -56,17 +59,38 @@ def get_business_details(html):
     business = meta_tag.get("content").split(
         "Established") if meta_tag else ["Details not found", ""]
     return business[0], "Established" + business[1] if len(business) > 1 else "Establishment date not found"
+    
+
+def get_owner_details(url):
+    try: # Adjust based on the observed load time of the page
+        chrome_options = webdriver.ChromeOptions()
+        global mainport
+        proxies_extension = proxies(username, password, endpoint, mainport)
+        mainport = setanotherport(mainport)
+
+        chrome_options.add_extension(proxies_extension)
+            # chrome_options.add_argument(f"user-agent={headers['User-Agent']}")
+        chrome_options.add_argument("--headless=new")
 
 
-def get_owner_details(html):
-    owner_section = html.find(
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        driver.get(url)
+        time.sleep(3)
+        page_source = driver.page_source
+        html = BeautifulSoup(page_source, 'html.parser')
+        owner_section = html.find(
         "section", attrs={"aria-label": "About the Business"})
-    owner_name_tag = owner_section.find(
-        "p", attrs={"data-font-weight": "bold"}) if owner_section else None
-    owner_bio_tag = owner_section.find(
-        "span", attrs={"width": "0"}) if owner_section else None
-    return owner_name_tag.text if owner_name_tag else "Owner name not found", owner_bio_tag.text if owner_bio_tag else "Owner biography not found"
-
+        owner_name_tag = owner_section.find(
+            "p", attrs={"data-font-weight": "bold"}) if owner_section else None
+        owner_bio_tag = owner_section.find(
+            "span", attrs={"width": "0"}) if owner_section else None
+        return owner_name_tag.text if owner_name_tag else "Owner name not found", owner_bio_tag.text if owner_bio_tag else "Owner biography not found"
+    except WebDriverException as e:
+        # print(f"An error occurred: ")
+        return "Owner name not found","Owner biography not found"
+    finally:
+        driver.quit()
+    
 
 def get_contactinfo(html):
     elements = html.find_all(class_='css-djo2w')
@@ -103,7 +127,13 @@ def get_imageGaleryurl(html):
     links = [tag.get("href") for tag in a_tags if tag.get(
         "href") and tag.get("href").startswith("/biz_photos")]
     # print("dddd",links)
-    return links[0]
+    if links:
+        return links[0]
+    else:
+        # Handle the case where no valid links are found
+        # print("No valid links found")
+        return None
+
 
 
 def get_imageGalerylist(url):
@@ -184,48 +214,154 @@ def get_avg_review(html):
     else:
         return "0"
 
+def scrap_owner_bio(url):
+    try:
+        chrome_options = webdriver.ChromeOptions()
+        global mainport
+        proxies_extension = proxies(username, password, endpoint, mainport)
+        mainport = setanotherport(mainport)
 
-def get_highlighting_HTS(html):
+        chrome_options.add_extension(proxies_extension)
+        # chrome_options.add_argument(f"user-agent={headers['User-Agent']}")
+        chrome_options.add_argument("--headless=new")
+
+
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        driver.get(url)
+
+        # Find the button by its aria-label and click it
+        button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[@aria-label='More information about the business. Opens a modal.']"))
+        )
+        button.click()
+
+        # Wait for the modal to appear and retrieve the text
+        modal_text = WebDriverWait(driver, 10).until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, "div.shadowedscroller-content__09f24__gytsV p"))
+        ).text
+        return modal_text
+        # print("Modal text:", modal_text)
+    except WebDriverException as e:
+        # print(f"An error occurred: ")
+        return ' '
+        # return []
+    finally:
+        driver.quit()
+    
+def get_highlighting_HTS(url):
     # mobile-text-medium__09f24__MZ1v6 css-1dtv2dz
     # arrange__09f24__LDfbs gutter-2__09f24__CCmUo layout-wrap__09f24__GEBlv layout-6-units__09f24__pP1H0 css-1qn0b6x
-    outer_div = html.find(
-        'div', class_='arrange__09f24__LDfbs gutter-2__09f24__CCmUo layout-wrap__09f24__GEBlv layout-6-units__09f24__pP1H0 css-1qn0b6x')
-    highlighting_HTS = []
-    # Check if the outer_div is found
-    if outer_div:
-        # Find the inner <div> within this outer <div>
-        inner_spans = outer_div.find_all(
-            'span', class_='mobile-text-medium__09f24__MZ1v6 css-1dtv2dz')
+    try:
+        chrome_options = webdriver.ChromeOptions()
+        global mainport
+        proxies_extension = proxies(username, password, endpoint, mainport)
+        mainport = setanotherport(mainport)
 
-        # Check if the inner_div is found and get its text
-        for inner_span in inner_spans:
-            spantext = inner_span.get_text()
-            highlighting_HTS.append(spantext)
-            # print("Found text:", div_text)
+        chrome_options.add_extension(proxies_extension)
+        # chrome_options.add_argument(f"user-agent={headers['User-Agent']}")
+        chrome_options.add_argument("--headless=new")
+
+
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        driver.get(url)
+        highlighting_HTS = []
+
+        # Locate the outer div using its class name
+        outer_div = driver.find_element(By.CLASS_NAME, 'arrange__09f24__LDfbs.gutter-2__09f24__CCmUo.layout-wrap__09f24__GEBlv.layout-6-units__09f24__pP1H0.css-1qn0b6x')
+
+        # Check if the outer div is found
+        if outer_div:
+            # Find all the inner spans within the outer div
+            inner_spans = outer_div.find_elements(By.CLASS_NAME, 'mobile-text-medium__09f24__MZ1v6.css-1dtv2dz')
+
+            # Iterate over each inner span and get its text
+            for inner_span in inner_spans:
+                span_text = inner_span.text.strip()  # Get the text and strip any extra whitespace
+                highlighting_HTS.append(span_text)
+                # Optionally print the found text
+                # print("Found text:", span_text)
         return highlighting_HTS
-    else:
-        return highlighting_HTS
+        # Close the browser
+    except WebDriverException as e:
+        # print(f"An error occurred: ")
+        return []
+    finally:
+        driver.quit()
+        # Return the list of texts
+        
+    # outer_div = html.find(
+    #     'div', class_='arrange__09f24__LDfbs gutter-2__09f24__CCmUo layout-wrap__09f24__GEBlv layout-6-units__09f24__pP1H0 css-1qn0b6x')
+    # highlighting_HTS = []
+    # # Check if the outer_div is found
+    # if outer_div:
+    #     # Find the inner <div> within this outer <div>
+    #     inner_spans = outer_div.find_all(
+    #         'span', class_='mobile-text-medium__09f24__MZ1v6 css-1dtv2dz')
+
+    #     # Check if the inner_div is found and get its text
+    #     for inner_span in inner_spans:
+    #         spantext = inner_span.get_text()
+    #         highlighting_HTS.append(spantext)
+    #         # print("Found text:", div_text)
+    #     return highlighting_HTS
+    # else:
+    #     return highlighting_HTS
 
 
-def get_services_offers(html):
+def get_services_offers(url):
+    try:
+        chrome_options = webdriver.ChromeOptions()
+        global mainport
+        proxies_extension = proxies(username, password, endpoint, mainport)
+        mainport = setanotherport(mainport)
 
-    outer_div = html.find(
-        'div', class_='arrange__09f24__LDfbs gutter-auto__09f24__W9jlL layout-2-units__09f24__PsGVW css-1qn0b6x')
-    services_offers = []
-    # Check if the outer_div is found
-    if outer_div:
-        # Find the inner <div> within this outer <div>
-        inner_divs = outer_div.find_all('div', class_='css-174a15u')
+        chrome_options.add_extension(proxies_extension)
+        # chrome_options.add_argument(f"user-agent={headers['User-Agent']}")
+        chrome_options.add_argument("--headless=new")
 
-        # Check if the inner_div is found and get its text
-        for inner_div in inner_divs:
-            div_text = inner_div.get_text(strip=True)
-            services_offers.append(div_text)
-            # print("Found text:", div_text)
+
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        driver.get(url)
+        services_offers = []
+
+        # Locate the outer div using its class name
+        outer_div = driver.find_element(By.CLASS_NAME, 'arrange__09f24__LDfbs.gutter-auto__09f24__W9jlL.layout-2-units__09f24__PsGVW.css-1qn0b6x')
+
+        # Check if the outer div is found
+        if outer_div:
+            # Find all the inner divs within the outer div
+            inner_divs = outer_div.find_elements(By.CLASS_NAME, 'css-174a15u')
+
+            # Iterate over each inner div and get its text
+            for inner_div in inner_divs:
+                div_text = inner_div.text.strip()
+                services_offers.append(div_text)
+                # Optionally print the found text
+                # print("Found text:", div_text)
         return services_offers
-    else:
-        return services_offers
+        # Close the browser
+    except WebDriverException as e:
+        # print(f"An error occurred: ")
+        return []
+    finally:
+        driver.quit()
 
+    # outer_div = html.find(
+    #     'div', class_='arrange__09f24__LDfbs gutter-auto__09f24__W9jlL layout-2-units__09f24__PsGVW css-1qn0b6x')
+    # services_offers = []
+    # # Check if the outer_div is found
+    # if outer_div:
+    #     # Find the inner <div> within this outer <div>
+    #     inner_divs = outer_div.find_all('div', class_='css-174a15u')
+
+    #     # Check if the inner_div is found and get its text
+    #     for inner_div in inner_divs:
+    #         div_text = inner_div.get_text(strip=True)
+    #         services_offers.append(div_text)
+    #         # print("Found text:", div_text)
+    #     return services_offers
+    # else:
+    #     return services_offers
 
 def get_booking_link(url):
     # print("Initializing WebDriver...")
@@ -249,7 +385,7 @@ def get_booking_link(url):
 
     # # Initialize WebDriver with options
     # driver = webdriver.Chrome(options=chrome_options)
-
+    a_href=' '
     try:
         # print("Navigating to URL...")
         driver.get(url)
@@ -323,13 +459,13 @@ def get_claimed(html):
         spantext = span_tag2.get_text()
         myclaim+=spantext+" "
 
-    span_tag1 = html.find('span',class_="css-1xfc281")
-    for element in span_tag1:
-        myclaim+=element.get_text(separator=" ", strip=True)
-    
-    # print(myclaim)
     return myclaim
-
+def get_category(html):
+    myclaim=''
+    span_tag1 = html.find('span',class_="css-1xfc281")
+    if span_tag1:
+        myclaim+=span_tag1.get_text(separator=" ", strip=True)
+    return myclaim
 def format_qa_to_json(qa_list):
     structured_qa = []
     for i in range(0, len(qa_list), 2):
@@ -384,12 +520,12 @@ def get_allreviws(html, num):
         item_details = {}
         # Find the 'a' tag with class 'css-vzslx5' and get its text
         a_tag = li.find('a', class_='css-19v1rkv')
-        item_details['a_tag_text'] = a_tag.text.strip() if a_tag else None
+        item_details['a_tag_text'] = a_tag.text.strip() if a_tag else ' '
 
         # Find the first 'span' tag with class 'css-qgunke' and get its text
         span_css_qgunke = li.find('span', class_='css-qgunke')
         item_details['span_css_qgunke_text'] = span_css_qgunke.text.strip(
-        ) if span_css_qgunke else None
+        ) if span_css_qgunke else ' '
 
         # Find the second 'span' tag with class 'raw__09f24__T4Ezm' and get its text
         span_raw = li.find('span', class_='raw__09f24__T4Ezm')
@@ -449,12 +585,6 @@ def get_allreviws(html, num):
     # for li in filtered_li_elements:
     #     print(li.prettify())
     # print(filtered_li_elements.__len__())
-def get_category(html):
-    myclaim=''
-    span_tag1 = html.find('span',class_="css-1xfc281")
-    for element in span_tag1:
-        myclaim+=element.get_text(separator=" ", strip=True)
-    return myclaim
 
 def getEachReviewPageSource(url):
     index = 0
@@ -513,11 +643,23 @@ def getEachReviewPageSource(url):
             index += 10  # increment to get the next set of results
         
         except WebDriverException as e:
-            print(f"An error occurred: ")
+            allviews=" "
+            # print(f"An error occurred: ")
         finally:
             driver.quit()
     # print(allviews)
     return allviews
+def get_cityname(html):
+    search_location_input = html.find('input', id='search_location')
+
+    # Retrieve the value attribute of the input element
+    if search_location_input:
+        search_location_value = search_location_input.get('value')
+        # print("The value of 'search_location' is:", search_location_value)
+        return search_location_value
+    else:
+        # print("No input tag with id 'search_location' found.")
+        return " "
 def get_geolocation(html):
     container = html.find('div', class_='container__09f24__fZQnf css-1rocox3')
     
@@ -541,6 +683,8 @@ def get_geolocation(html):
 
 def scrape_business_page(url):
     global mainport
+    global globalid
+    globalid = globalid+1
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36'}
 
     proxies1 = {'http': f'http://sp43xuny7n:i1NRxNR_66x+xO6A4@gate.dc.smartproxy.com:{mainport}',  # Your username, password for proxy authentication, and desired endpoint within punctuation marks ('')
@@ -552,16 +696,31 @@ def scrape_business_page(url):
     # time.sleep(2)
     html = BeautifulSoup(r.content, 'html.parser')
     # return
-    reviews = getEachReviewPageSource(url)
-    # reviews = ''
     
-
+    
+    # cityname = get_cityname(html)
+    global globalcityname
     place_name = get_place_name(html)
     image_url = get_image_url(html)
-    # print(place_name,image_url)
-    # return
     business_specialties, business_history = get_business_details(html)
-    owner_name, owner_bio = get_owner_details(html)
+
+    # reviews = getEachReviewPageSource(url)
+    # owner_name, owner_bio = get_owner_details(url)
+    # owner_bio = scrap_owner_bio(url)
+    # services_offers = get_services_offers(url)
+    # services_offers = ', '.join(services_offers)
+
+    # highlighting_HTS = get_highlighting_HTS(url)
+    # highlighting_HTS = ','.join(highlighting_HTS)
+    # booking_link = get_booking_link(url)
+
+    reviews = ''
+    booking_link=' '
+    owner_name=''
+    owner_bio=''
+    highlighting_HTS=''
+    services_offers=''
+
     contactinfo = get_contactinfo(html)
     if len(contactinfo)>1:
         place_phone = contactinfo[1]
@@ -606,27 +765,29 @@ def scrape_business_page(url):
         place_opening_Saturday_time=''
         place_opening_Sunday=''
         place_opening_Sunday_time=''
-    booking_link = get_booking_link(url)
-    # booking_link=''
+    
+    if booking_link==' ':
+        booking_type  = 'contact '
+    else:
+        booking_type = 'external' 
     bussiness_faq = get_bussiness_FAQ(html)
     # print(bussiness_faq)
     # print(type(bussiness_faq))
-
-    imageGalerylist = get_imageGalerylist(get_imageGaleryurl(html))
-    imageGalerylist = ', '.join(imageGalerylist)
-
+    gallery_url = get_imageGaleryurl(html)
+    if gallery_url:
+        imageGalerylist = get_imageGalerylist(get_imageGaleryurl(html))
+        imageGalerylist = ', '.join(imageGalerylist)
+        videoList = get_videourlList(get_imageGaleryurl(html))
+        videoList = ', '.join(videoList)
+    else:
+        imageGalerylist='[]'
+        videoList=[]
     avg_review = get_avg_review(html)
-    services_offers = get_services_offers(html)
-    services_offers = ', '.join(services_offers)
-
-    highlighting_HTS = get_highlighting_HTS(html)
-    highlighting_HTS = ','.join(highlighting_HTS)
-
     full_address = get_full_address(html)
-    videoList = get_videourlList(get_imageGaleryurl(html))
-    videoList = ', '.join(videoList)
+    
 
     return {
+        "id":f"{globalid}",
         "place_name": place_name,
         "image_url": image_url,
         'Price': price,
@@ -638,7 +799,7 @@ def scrape_business_page(url):
         'Place_type': 'N/A',
         "highlighting_HTS": highlighting_HTS,
         "services_offers": services_offers,
-        "City": 'San Francisco',
+        "City": globalcityname,
         "full_address": full_address,
         'Geo_location':geolocation,
         'place_opening_Monday': place_opening_Monday,
@@ -661,7 +822,7 @@ def scrape_business_page(url):
         "place_images_Gallery": imageGalerylist,
         'place_video_url': videoList,
         "avg_review": avg_review,
-        "place_booking_type": "(contact/appointment/externa_link)",
+        "place_booking_type": booking_type,
         "Place_BOOKING_Link": booking_link,
         'Business_status':   get_claimed1,
         'reviews': reviews,
@@ -673,6 +834,13 @@ def scrape_business_page(url):
 
 
 def main():
+    # url = "https://www.yelp.com/biz/bowery-dental-new-york?osq=Dentists"
+    # url="https://www.yelp.com/biz/trailridge-family-dental-parma?osq=Dentists"
+    # scrap_owner_bio(url)
+    # return
+    # business_data = scrape_business_page(url)
+    # print(business_data)
+    # return
     url1 = sys.argv[2]
     proxy_file = sys.argv[4]
     agent_file = sys.argv[6]
@@ -680,7 +848,19 @@ def main():
     max_listings = sys.argv[10] if len(sys.argv) > 10 else None
     print(f"scraping {max_listings} listing of the url {url1}")
     # print(output_file)
-    
+    parsed_url = urlparse(url1)
+    query_string = parsed_url.query
+
+    # Parse the query string into a dictionary
+    query_params = parse_qs(query_string)
+
+    # Get the value associated with 'find_loc'
+    city_name = query_params.get('find_loc', [None])[0]
+    global globalcityname
+    globalcityname = city_name
+
+    # print("The city name is:", city_name)
+
     # url = 'https://www.yelp.com/search?find_desc=Dentist&find_loc=San+Francisco%2C+CA'
     # url='https://www.yelp.com/search?find_desc=Dentist&find_loc=San+Francisco%2C+CA'
     # # r = requests.get(url)  # proxies=proxy if needed
@@ -693,7 +873,7 @@ def main():
                     'https': f'https://sp43xuny7n:i1NRxNR_66x+xO6A4@gate.dc.smartproxy.com:{mainport}'}
         mainport = setanotherport(mainport)
         # print(mainport)
-        url = f"{url1}?start={pagenumber}"
+        url = f"{url1}&start={pagenumber*10}"
         # url = url1+f"&start={pagenumber}"
         pagenumber = pagenumber+1
         r = requests.get(url, headers=headers, proxies=proxies)
@@ -701,17 +881,18 @@ def main():
         # # r = requests.get(url)
         # time.sleep(2)
         # # print(r.content)
-        html = BeautifulSoup(r.text, 'html.parser')
+        html = BeautifulSoup(r.content, 'html.parser')
         # with open('out.html', 'a', encoding='utf-8') as f:
         #     f.write(str(html))  # convert HTML to string before writing
         # print(html)
         links = get_links(html)
         if len(links)<9:
-            print(f"done! scraped {max_listings} listing saved to {output_file}")
+            print(f"finished! Because yelp.com is very slow when scrap {url} \n scraped {(pagenumber-1)*10} listing saved to {output_file}")
             return
         if (pagenumber-1)*10>=int(max_listings):
             print(f"done! scraped {max_listings} listing saved to {output_file}")
             return
+        
         # print(links)
         # return
         for link in links:

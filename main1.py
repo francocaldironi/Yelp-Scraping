@@ -16,6 +16,7 @@ from extension import proxies
 import sys
 import time
 import urllib.parse
+from urllib.parse import urlparse, parse_qs
 # Proxy authentication information - Uncomment and modify if proxies are needed
 # proxy = {
 #     'http': 'http://username:password@proxy-address:port',
@@ -25,7 +26,8 @@ username = 'sp43xuny7n'
 password = 'i1NRxNR_66x+xO6A4'
 endpoint = 'gate.dc.smartproxy.com'
 mainport = 20001
-
+globalid = 0
+globalcityname=''
 def setanotherport(port):
     port = port+1
     if port>37959:
@@ -102,7 +104,12 @@ def get_imageGaleryurl(html):
     links = [tag.get("href") for tag in a_tags if tag.get(
         "href") and tag.get("href").startswith("/biz_photos")]
     # print("dddd",links)
-    return links[0]
+    if links:
+        return links[0]
+    else:
+        # Handle the case where no valid links are found
+        # print("No valid links found")
+        return None
 
 
 def get_imageGalerylist(url):
@@ -326,8 +333,8 @@ def get_claimed(html):
 def get_category(html):
     myclaim=''
     span_tag1 = html.find('span',class_="css-1xfc281")
-    for element in span_tag1:
-        myclaim+=element.get_text(separator=" ", strip=True)
+    if span_tag1:
+        myclaim+=span_tag1.get_text(separator=" ", strip=True)
     return myclaim
 def format_qa_to_json(qa_list):
     structured_qa = []
@@ -383,12 +390,12 @@ def get_allreviws(html, num):
         item_details = {}
         # Find the 'a' tag with class 'css-vzslx5' and get its text
         a_tag = li.find('a', class_='css-19v1rkv')
-        item_details['a_tag_text'] = a_tag.text.strip() if a_tag else None
+        item_details['a_tag_text'] = a_tag.text.strip() if a_tag else ' '
 
         # Find the first 'span' tag with class 'css-qgunke' and get its text
         span_css_qgunke = li.find('span', class_='css-qgunke')
         item_details['span_css_qgunke_text'] = span_css_qgunke.text.strip(
-        ) if span_css_qgunke else None
+        ) if span_css_qgunke else ' '
 
         # Find the second 'span' tag with class 'raw__09f24__T4Ezm' and get its text
         span_raw = li.find('span', class_='raw__09f24__T4Ezm')
@@ -552,9 +559,10 @@ def scrape_business_page(url):
     # time.sleep(2)
     html = BeautifulSoup(r.content, 'html.parser')
     # return
-    reviews = getEachReviewPageSource(url)
-    # reviews=''
-
+    # reviews = getEachReviewPageSource(url)
+    reviews=''
+    global globalcityname
+    global globalid
     place_name = get_place_name(html)
     image_url = get_image_url(html)
     # print(place_name,image_url)
@@ -605,15 +613,34 @@ def scrape_business_page(url):
         place_opening_Saturday_time=''
         place_opening_Sunday=''
         place_opening_Sunday_time=''
-    booking_link = get_booking_link(url)
-    # booking_link=''
+    # booking_link = get_booking_link(url)
+    booking_link=' '
+    if booking_link==' ':
+        booking_type  = 'contact '
+    else:
+        booking_type = 'external' 
     bussiness_faq = get_bussiness_FAQ(html)
     # print(bussiness_faq)
     # print(type(bussiness_faq))
+    gallery_url = get_imageGaleryurl(html)
 
-    imageGalerylist = get_imageGalerylist(get_imageGaleryurl(html))
-    imageGalerylist = ', '.join(imageGalerylist)
+    if gallery_url:
 
+        
+        imageGalerylist = get_imageGalerylist(get_imageGaleryurl(html))
+        
+        imageGalerylist = ', '.join(imageGalerylist)
+        
+        videoList = get_videourlList(get_imageGaleryurl(html))
+        
+        videoList = ', '.join(videoList)
+    
+    else:
+        
+        imageGalerylist='[]'
+	    
+        videoList=[]    
+	
     avg_review = get_avg_review(html)
     services_offers = get_services_offers(html)
     services_offers = ', '.join(services_offers)
@@ -622,10 +649,9 @@ def scrape_business_page(url):
     highlighting_HTS = ','.join(highlighting_HTS)
 
     full_address = get_full_address(html)
-    videoList = get_videourlList(get_imageGaleryurl(html))
-    videoList = ', '.join(videoList)
 
     return {
+        "id":f"{globalid}",
         "place_name": place_name,
         "image_url": image_url,
         'Price': price,
@@ -637,7 +663,7 @@ def scrape_business_page(url):
         'Place_type': 'N/A',
         "highlighting_HTS": highlighting_HTS,
         "services_offers": services_offers,
-        "City": 'San Francisco',
+        "City": globalcityname,
         "full_address": full_address,
         'Geo_location':geolocation,
         'place_opening_Monday': place_opening_Monday,
@@ -660,7 +686,7 @@ def scrape_business_page(url):
         "place_images_Gallery": imageGalerylist,
         'place_video_url': videoList,
         "avg_review": avg_review,
-        "place_booking_type": "(contact/appointment/externa_link)",
+        "place_booking_type": booking_type,
         "Place_BOOKING_Link": booking_link,
         'Business_status':   get_claimed1,
         'reviews': reviews,
@@ -672,6 +698,11 @@ def scrape_business_page(url):
 
 
 def main():
+    # url = "https://www.yelp.com/biz/lumia-dental-new-york-4?osq=Dentists"
+    # # url="https://www.yelp.com/biz/zen-dental-studio-san-francisco-2?osq=Dentist"
+    # business_data = scrape_business_page(url)
+    # print(business_data)
+    # return
     url1 = sys.argv[2]
     proxy_file = sys.argv[4]
     agent_file = sys.argv[6]
@@ -679,7 +710,17 @@ def main():
     max_listings = sys.argv[10] if len(sys.argv) > 10 else None
     print(f"scraping {max_listings} listing of the url {url1}")
     # print(output_file)
-    
+    parsed_url = urlparse(url1)
+    query_string = parsed_url.query
+
+    # Parse the query string into a dictionary
+    query_params = parse_qs(query_string)
+
+    # Get the value associated with 'find_loc'
+    city_name = query_params.get('find_loc', [None])[0]
+    global globalcityname
+    globalcityname = city_name
+
     # url = 'https://www.yelp.com/search?find_desc=Dentist&find_loc=San+Francisco%2C+CA'
     # url='https://www.yelp.com/search?find_desc=Dentist&find_loc=San+Francisco%2C+CA'
     # # r = requests.get(url)  # proxies=proxy if needed
@@ -692,7 +733,7 @@ def main():
                     'https': f'https://sp43xuny7n:i1NRxNR_66x+xO6A4@gate.dc.smartproxy.com:{mainport}'}
         mainport = setanotherport(mainport)
         # print(mainport)
-        url = f"{url1}?start={pagenumber}"
+        url = f"{url1}&start={pagenumber*10}"
        
         # url = url1+f"&start={pagenumber}"
         pagenumber = pagenumber+1
